@@ -1,0 +1,46 @@
+{
+  "name": "smart-roommate-finder",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Smart roommate finder app starter",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "lint": "eslint ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/samreetkp/smart-roommate-finder.git"
+  },
+  "keywords": [
+    "roommate",
+    "matching",
+    "react",
+    "vite"
+  ],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/samreetkp/smart-roommate-finder/issues"
+  },
+  "homepage": "https://github.com/samreetkp/smart-roommate-finder#readme",
+  "dependencies": {
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.4.0",
+    "typescript": "^6.0.2",
+    "typescript-eslint": "^8.58.0",
+    "vite": "^8.0.3"
+  }
+}
