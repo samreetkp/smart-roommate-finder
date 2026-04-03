@@ -1265,17 +1265,15 @@ out center tags 120;
       }
       await ensureProfileRow(cleanedFullName, birthRaw, signUpVisibleToOthers);
 
-      // Supabase: if email confirmation is off, signUp returns a session and user should enter the app.
-      // If confirmation is on, there is no session yet — guide them to sign in after confirming.
-      if (signUpData.session?.user?.email) {
-        setSessionEmail(signUpData.session.user.email);
-        setAuthMessage(null);
-      } else {
-        setAuthMode("signin");
-        setAuthMessage(
-          "Account created. Confirm your email if your project requires it, then sign in below with the same password."
-        );
+      // If email confirmation is off, Supabase may return a session — sign out locally so we always
+      // send new users to the Sign in step with a clear message.
+      if (signUpData.session) {
+        await supabase.auth.signOut({ scope: "local" });
+        setSessionEmail(null);
       }
+
+      setAuthMode("signin");
+      setAuthMessage("Account created. Sign in with the same email and password below.");
       setAuthLoading(false);
       return;
     }
