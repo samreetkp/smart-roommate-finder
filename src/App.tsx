@@ -109,6 +109,30 @@ function parseScale1to5(value: unknown, fallback: Scale1to5Answer): Scale1to5Ans
   return clamp(rounded, 1, 5) as Scale1to5Answer;
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === "object") {
+    const maybe = error as { message?: unknown; error_description?: unknown; details?: unknown };
+    if (typeof maybe.message === "string" && maybe.message.trim()) return maybe.message;
+    if (typeof maybe.error_description === "string" && maybe.error_description.trim()) {
+      return maybe.error_description;
+    }
+    if (typeof maybe.details === "string" && maybe.details.trim()) return maybe.details;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "Unknown error";
+    }
+  }
+  if (typeof error === "string" && error.trim()) return error;
+  return "Unknown error";
+}
+
+function firstNameOnly(name: string): string {
+  const first = name.trim().split(/\s+/)[0];
+  return first || name;
+}
+
 export default function App() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -1079,9 +1103,6 @@ out center tags 120;
 
     const resolvedFirstName = (params?.firstName ?? metadata.first_name ?? "").trim() || null;
     const resolvedLastName = (params?.lastName ?? metadata.last_name ?? "").trim() || null;
-    const resolvedFullName =
-      (params?.fullName ?? (resolvedFirstName && resolvedLastName ? `${resolvedFirstName} ${resolvedLastName}` : metadata.full_name) ?? "")
-        .trim() || null;
 
     const resolvedUsername =
       (params?.username ?? metadata.username ?? "").trim().toLowerCase() || null;
@@ -1091,7 +1112,6 @@ out center tags 120;
       email: resolvedEmail,
       ...(resolvedFirstName ? { first_name: resolvedFirstName } : {}),
       ...(resolvedLastName ? { last_name: resolvedLastName } : {}),
-      ...(resolvedFullName ? { full_name: resolvedFullName } : {}),
       ...(resolvedUsername ? { username: resolvedUsername } : {}),
     };
 
@@ -1150,7 +1170,6 @@ out center tags 120;
       setAuthMessage(error.message);
       return;
     }
-    setAuthMessage("Check your email for a password reset link.");
   }
 
   async function handleUpdateRecoveryPassword() {
@@ -1176,7 +1195,7 @@ out center tags 120;
     if (typeof window !== "undefined") {
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
     }
-    setAuthMessage("Your password was updated.");
+    setAuthMessage(null);
   }
 
   async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
@@ -1239,13 +1258,13 @@ out center tags 120;
           email: userEmail,
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         setAuthMessage(`Account created, but profile setup failed: ${message}`);
         setAuthLoading(false);
         return;
       }
       await ensureProfileRow(cleanedFullName, birthRaw, signUpVisibleToOthers);
-      setAuthMessage("Account created. Check your email for verification if prompted.");
+      setAuthMessage(null);
       setAuthLoading(false);
       return;
     }
@@ -1264,12 +1283,12 @@ out center tags 120;
     try {
       await ensurePublicUserRow({ email: userEmail });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       setAuthMessage(`Signed in, but profile sync failed: ${message}`);
       setAuthLoading(false);
       return;
     }
-    setAuthMessage("Signed in successfully.");
+    setAuthMessage(null);
     setAuthLoading(false);
   }
 
@@ -1281,7 +1300,7 @@ out center tags 120;
       setAuthLoading(false);
       return;
     }
-    setAuthMessage("Signed out.");
+    setAuthMessage(null);
     setSignUpBirthdate("");
     setSignUpVisibleToOthers(true);
     setProfileBirthdate("");
@@ -1314,7 +1333,7 @@ out center tags 120;
       }
 
       const userEmailForStorage = user.email ?? sessionEmail;
-      let deletionStatusMessage: string | null = null;
+      let deletionErrorMessage: string | null = null;
 
       // Try the Edge Function first (it can actually delete auth.users).
       const { error: fnError } = await supabase.functions.invoke("delete-current-user", {
@@ -1332,17 +1351,9 @@ out center tags 120;
             .eq("id", user.id);
 
           if (directDeleteError) {
-            deletionStatusMessage = `Could not fully delete account on server. Edge function error: ${fnError.message}. RPC error: ${deleteError.message}. Direct delete error: ${directDeleteError.message}`;
-          } else {
-            deletionStatusMessage =
-              "Your app data was deleted directly, but your auth login could not be fully removed. Deploy the delete-current-user Edge Function for full auth deletion.";
+            deletionErrorMessage = `Could not fully delete account on server. Edge function error: ${fnError.message}. RPC error: ${deleteError.message}. Direct delete error: ${directDeleteError.message}`;
           }
-        } else {
-          deletionStatusMessage =
-            "Your app data was deleted, but your auth login could not be fully removed. Deploy the delete-current-user Edge Function to enable full account deletion.";
         }
-      } else {
-        deletionStatusMessage = "Your account has been deleted.";
       }
 
       if (userEmailForStorage) {
@@ -1366,9 +1377,9 @@ out center tags 120;
       setUtilitiesPageOpen(false);
       setSwipes([]);
       setSessionEmail(null);
-      setAuthMessage(deletionStatusMessage);
+      setAuthMessage(deletionErrorMessage);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       setAuthMessage(`Unable to delete account: ${message}`);
     } finally {
       setAuthLoading(false);
@@ -1555,7 +1566,6 @@ out center tags 120;
     );
     setOnboardingComplete(true);
     setSwipes([]);
-    setAuthMessage("Onboarding skipped. You can complete it later from Profile.");
     void persistQuestionnaireToSupabase({
       answers: onboardingAnswers,
       miniGames: null,
@@ -1573,7 +1583,6 @@ out center tags 120;
         miniGames: miniGameAnswers,
       })
     );
-    setAuthMessage("Onboarding answers saved.");
     void persistQuestionnaireToSupabase({
       answers: onboardingAnswers,
       miniGames: miniGameAnswers,
@@ -1624,6 +1633,15 @@ out center tags 120;
         return;
       }
 
+      try {
+        // Ensure FK parent row exists before inserting into profile_photos.
+        await ensurePublicUserRow({ email: user.email ?? undefined });
+      } catch (syncError) {
+        const message = getErrorMessage(syncError);
+        setAuthMessage(`Unable to prepare account for photo upload: ${message}`);
+        return;
+      }
+
       const extension = (file.name.split(".").pop() ?? "jpg").toLowerCase();
       const safeExtension = extension.replace(/[^a-z0-9]/g, "") || "jpg";
       const objectPath = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${safeExtension}`;
@@ -1643,12 +1661,30 @@ out center tags 120;
 
       await supabase.from("profile_photos").update({ is_primary: false }).eq("user_id", user.id);
 
-      const { error: rowError } = await supabase.from("profile_photos").insert({
+      let { error: rowError } = await supabase.from("profile_photos").insert({
         user_id: user.id,
         url: publicUrl,
         position: 0,
         is_primary: true,
       });
+
+      if (rowError && rowError.message.includes("profile_photos_user_id_fkey")) {
+        // If user row was missing transiently, recreate/sync and retry once.
+        try {
+          await ensurePublicUserRow({ email: user.email ?? undefined });
+          const retry = await supabase.from("profile_photos").insert({
+            user_id: user.id,
+            url: publicUrl,
+            position: 0,
+            is_primary: true,
+          });
+          rowError = retry.error;
+        } catch (syncError) {
+          const message = getErrorMessage(syncError);
+          setAuthMessage(`Unable to prepare account for photo upload: ${message}`);
+          return;
+        }
+      }
 
       if (rowError) {
         setAuthMessage(`Photo uploaded but could not save profile photo row: ${rowError.message}`);
@@ -1656,7 +1692,7 @@ out center tags 120;
       }
 
       setProfilePhotoUrl(publicUrl);
-      setAuthMessage("Profile photo uploaded. Click Next to continue.");
+      setAuthMessage(null);
     } finally {
       setPhotoUploading(false);
     }
@@ -1673,7 +1709,7 @@ out center tags 120;
     if (!sessionEmail) return;
     localStorage.setItem(photoPromptStorageKey(sessionEmail), "done");
     setPhotoPromptComplete(true);
-    setAuthMessage("You can upload a profile photo later in Profile.");
+    setAuthMessage(null);
   }
 
   function handleCompletePhotoPrompt() {
@@ -1808,7 +1844,6 @@ out center tags 120;
       const { error: userError } = await supabase
         .from("users")
         .update({
-          full_name: cleanedFullName,
           first_name: cleanedFirstName,
           last_name: cleanedLastName,
         })
@@ -1913,7 +1948,7 @@ out center tags 120;
       setSelectedConversationId(conversationId);
       setMessageDraft(`Hi ${candidate.name}, I found your profile and wanted to connect.`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       setAuthMessage(`Could not start a message: ${message}`);
     }
   }
@@ -1961,7 +1996,7 @@ out center tags 120;
         setAuthMessage(`Could not send report: ${error.message}`);
         return;
       }
-      setAuthMessage("Thanks—your report was submitted.");
+      setAuthMessage(null);
       setReportTarget(null);
     } finally {
       setReportSending(false);
@@ -1978,6 +2013,10 @@ out center tags 120;
           width={1536}
           height={1024}
         />
+        <p className="splash-tagline">
+          <span className="splash-tagline-primary">Match Smarter.</span>{" "}
+          <span className="splash-tagline-secondary">Live Better.</span>
+        </p>
       </main>
     );
   }
@@ -1986,14 +2025,16 @@ out center tags 120;
     return (
       <main className={`page auth-page theme-${theme}`}>
         <header className="hero">
-          <img
-            className="app-logo"
-            src="/roomai_logo.png"
-            alt="RoomAi"
-            width={1536}
-            height={1024}
-          />
-          <h1>Welcome to RoomAi</h1>
+          <div className="hero-title-row">
+            <img
+              className="app-logo"
+              src="/roomai_logo.png"
+              alt="RoomAi"
+              width={1536}
+              height={1024}
+            />
+            <h1>Welcome to RoomAi</h1>
+          </div>
           <p>
             Sign in or create your account to start matching with compatible roommates.
           </p>
@@ -3625,6 +3666,9 @@ out center tags 120;
               ) : (
                 remainingCandidates.map((candidate) => (
                   <article key={candidate.id} className="card swipe-card">
+                    {(() => {
+                      const candidateFirstName = firstNameOnly(candidate.name);
+                      return (
                     <div
                       className="swipe-card-main"
                       title="Click for full profile"
@@ -3636,9 +3680,9 @@ out center tags 120;
                             className="candidate-photo"
                             src={
                               candidate.photoUrl ??
-                              `https://ui-avatars.com/api/?name=${encodeURIComponent(candidate.name)}&size=320&background=f5d7c2&color=4c2f21`
+                              `https://ui-avatars.com/api/?name=${encodeURIComponent(candidateFirstName)}&size=320&background=f5d7c2&color=4c2f21`
                             }
-                            alt={`${candidate.name}'s profile`}
+                            alt={`${candidateFirstName}'s profile`}
                             loading="lazy"
                           />
                           <div
@@ -3667,7 +3711,7 @@ out center tags 120;
                         <div className="card-top">
                           <div>
                             <h2>
-                              {candidate.name}, {candidate.age}
+                              {candidateFirstName}, {candidate.age}
                             </h2>
                             <p>{candidate.city}</p>
                           </div>
@@ -3716,6 +3760,8 @@ out center tags 120;
                         </div>
                       </div>
                     </div>
+                      );
+                    })()}
 
                     <div
                       className="actions-row"
@@ -3750,35 +3796,45 @@ out center tags 120;
               {likedCandidates.length === 0 ? (
                 <p className="small-note">No likes yet.</p>
               ) : (
-                likedCandidates.map((candidate) => (
-                  <div className="liked-row" key={candidate.id}>
-                    <button
-                      type="button"
-                      className="liked-row-main liked-row-clickable"
-                      aria-label={`View ${candidate.name}'s full profile`}
-                      onClick={() => openDeckProfile(candidate)}
-                    >
-                      <span>
-                        {candidate.name} ({candidate.city})
-                      </span>
-                      <strong>
-                        {deckMode === "compatibility"
-                          ? `${candidate.compatibility.totalScore}%`
-                          : "Liked"}
-                      </strong>
-                    </button>
-                    <button
-                      type="button"
-                      className="liked-remove-btn"
-                      aria-label={`Remove ${candidate.name} from liked profiles`}
-                      onClick={() =>
-                        setRemoveLikeTarget({ id: candidate.id, name: candidate.name })
-                      }
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))
+                likedCandidates.map((candidate) => {
+                  const candidateFirstName = firstNameOnly(candidate.name);
+                  const cityText = (candidate.city ?? "").trim();
+                  const likedCityLabel =
+                    cityText.length > 0
+                      ? cityText
+                      : uuidLooksLikeUserId(candidate.id)
+                        ? "Denver, CO"
+                        : candidate.city;
+                  return (
+                    <div className="liked-row" key={candidate.id}>
+                      <button
+                        type="button"
+                        className="liked-row-main liked-row-clickable"
+                        aria-label={`View ${candidateFirstName}'s full profile`}
+                        onClick={() => openDeckProfile(candidate)}
+                      >
+                        <span>
+                          {candidateFirstName} ({likedCityLabel})
+                        </span>
+                        <strong>
+                          {deckMode === "compatibility"
+                            ? `${candidate.compatibility.totalScore}%`
+                            : "Liked"}
+                        </strong>
+                      </button>
+                      <button
+                        type="button"
+                        className="liked-remove-btn"
+                        aria-label={`Remove ${candidateFirstName} from liked profiles`}
+                        onClick={() =>
+                          setRemoveLikeTarget({ id: candidate.id, name: candidateFirstName })
+                        }
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  );
+                })
               )}
             </section>
           </div>
@@ -3819,7 +3875,7 @@ out center tags 120;
               />
               <div className="deck-profile-hero-text">
                 <h2 id="deck-profile-title" className="deck-profile-name">
-                  {deckProfileCandidate.name}, {deckProfileCandidate.age}
+                  {firstNameOnly(deckProfileCandidate.name)}, {deckProfileCandidate.age}
                 </h2>
                 <p className="deck-profile-city">{deckProfileCandidate.city}</p>
                 {deckMode === "compatibility" ? (

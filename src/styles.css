@@ -87,12 +87,40 @@ h6,
   display: grid;
   place-items: center;
   padding: 2rem 1rem;
+  position: relative;
 }
 
 .splash-logo {
   width: min(420px, 72vw);
   height: auto;
   animation: splash-in 0.35s ease;
+  position: relative;
+  z-index: 2;
+}
+
+.splash-tagline {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(calc(-50% + 6px), min(14vw, 60px));
+  text-align: center;
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: linear-gradient(90deg, var(--progress-a), var(--badge-bg));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.splash-tagline-primary {
+  color: inherit;
+}
+
+.splash-tagline-secondary {
+  color: inherit;
 }
 
 .page {
@@ -116,22 +144,29 @@ h6,
   max-width: 680px;
 }
 
+.hero-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.35rem;
+}
+
 .app-logo {
   display: block;
-  max-width: 180px;
-  width: 100%;
+  width: 148px;
+  flex: 0 0 auto;
   height: auto;
-  margin: 0 0 0.5rem;
+  margin: 0;
 }
 
 .hero h1 {
-  margin: 0.1rem 0 0.4rem;
-  font-size: clamp(1.8rem, 3.2vw, 2.6rem);
+  margin: 0 0 0 -6px;
+  font-size: clamp(1.3rem, 2.7vw, 2.1rem);
   letter-spacing: -0.02em;
 }
 
 .hero p {
-  margin: 0;
+  margin: 0 0 0 6px;
   color: var(--hero-text);
 }
 
