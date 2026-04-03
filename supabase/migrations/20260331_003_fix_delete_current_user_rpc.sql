@@ -1,0 +1,19 @@
+create or replace function public.delete_current_user()
+returns void
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  -- The client (anon key) cannot delete from auth.users in Supabase.
+  -- As a safe fallback, delete app-owned rows; user can still exist in auth.
+  delete from public.users where id = auth.uid();
+end;
+$$;
+
+grant execute on function public.delete_current_user() to authenticated;
+
