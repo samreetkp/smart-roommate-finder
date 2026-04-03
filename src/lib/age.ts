@@ -6,8 +6,12 @@ export function calculateAgeFromBirthdate(isoDate: string): number | null {
   const m = Number(ms);
   const d = Number(ds);
   if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
-  const birth = new Date(y, m - 1, d);
+
+  // Build from local Y/M/D and reject calendar overflow (e.g. 2024-02-31).
+  const birth = new Date(y, m - 1, d, 12, 0, 0, 0);
   if (Number.isNaN(birth.getTime())) return null;
+  if (birth.getFullYear() !== y || birth.getMonth() !== m - 1 || birth.getDate() !== d) return null;
+
   const today = new Date();
   let age = today.getFullYear() - birth.getFullYear();
   const monthDiff = today.getMonth() - birth.getMonth();

@@ -78,7 +78,7 @@ export function normalizeHomeWeek(vec: HomeWeekSplit): HomeWeekSplit {
   const sum = adjusted.reduce((a, b) => a + b, 0);
   const scale = 100 / sum;
   const raw = Object.fromEntries(keys.map((k, i) => [k, Math.round(adjusted[i] * scale)])) as HomeWeekSplit;
-  let total = keys.reduce((acc, k) => acc + raw[k], 0);
+  const total = keys.reduce((acc, k) => acc + raw[k], 0);
   if (total !== 100) {
     const diff = 100 - total;
     const maxKey = keys.reduce((best, k) => (raw[k] > raw[best] ? k : best), keys[0]);

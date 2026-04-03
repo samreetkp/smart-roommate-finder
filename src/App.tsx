@@ -1232,7 +1232,7 @@ out center tags 120;
         return;
       }
 
-      const { error: signUpError } = await supabase.auth.signUp({
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: userEmail,
         password,
         options: {
@@ -1264,7 +1264,18 @@ out center tags 120;
         return;
       }
       await ensureProfileRow(cleanedFullName, birthRaw, signUpVisibleToOthers);
-      setAuthMessage(null);
+
+      // Supabase: if email confirmation is off, signUp returns a session and user should enter the app.
+      // If confirmation is on, there is no session yet — guide them to sign in after confirming.
+      if (signUpData.session?.user?.email) {
+        setSessionEmail(signUpData.session.user.email);
+        setAuthMessage(null);
+      } else {
+        setAuthMode("signin");
+        setAuthMessage(
+          "Account created. Confirm your email if your project requires it, then sign in below with the same password."
+        );
+      }
       setAuthLoading(false);
       return;
     }
